@@ -1,6 +1,6 @@
 use zkbrainfuck::code;
 use zkbrainfuck::interpreter::Interpreter;
-use zkbrainfuck::interpreter::Register;
+use zkbrainfuck::matrix::Matrix;
 
 use halo2_proofs::arithmetic::Field;
 use halo2_proofs::circuit::{Layouter, SimpleFloorPlanner, Value};
@@ -13,42 +13,94 @@ use std::marker::PhantomData;
 #[derive(Clone, Debug, Copy)]
 struct Config {
     clk: Column<Advice>,
-    s_clk: Selector,
+    mv: Column<Advice>,
+    mvi: Column<Advice>,
+    s_p0: Selector, // P0: cycle increases by one per step
+    s_c0: Selector, // C0: mv is 0 or mvi is the inverse of mv
+    s_c1: Selector, // C1: mvi is 0 or mvi is the inverse of mv
 }
 
 impl Config {
-    fn configure<F: Field>(cs: &mut ConstraintSystem<F>) -> Self {
-        let clk = cs.advice_column();
-        let s_clk = cs.selector();
+    fn configure(cs: &mut ConstraintSystem<Fq>) -> Self {
+        let one = Expression::Constant(Fq::one());
 
-        cs.create_gate("clk consistency", |vc| {
-            let s = vc.query_selector(s_clk);
+        let clk = cs.advice_column();
+        let s_p0 = cs.selector();
+        cs.create_gate("P0: clk increase one per step", |vc| {
+            let s = vc.query_selector(s_p0);
             let cur_clk = vc.query_advice(clk, Rotation::cur());
             let next_clk = vc.query_advice(clk, Rotation::next());
-            let one = Expression::Constant(F::one());
-            vec![s * (next_clk - cur_clk - one)]
+            vec![s * (next_clk - cur_clk - one.clone())]
         });
-        Self { clk, s_clk }
+
+        let mv = cs.advice_column();
+        let mvi = cs.advice_column();
+        let s_c0 = cs.selector();
+        cs.create_gate("C0: mv is 0 or mvi is the inverse of mv", |vc| {
+            let s = vc.query_selector(s_c0);
+            let mv = vc.query_advice(mv, Rotation::cur());
+            let mvi = vc.query_advice(mvi, Rotation::cur());
+            vec![s * mv.clone() * (mv * mvi - one.clone())]
+        });
+
+        let s_c1 = cs.selector();
+        cs.create_gate("C1: mvi is 0 or mvi is the inverse of mv", |vc| {
+            let s = vc.query_selector(s_c1);
+            let mv = vc.query_advice(mv, Rotation::cur());
+            let mvi = vc.query_advice(mvi, Rotation::cur());
+            vec![s * mvi.clone() * (mv * mvi - one.clone())]
+        });
+
+        Self {
+            clk,
+            mv,
+            mvi,
+            s_p0,
+            s_c0,
+            s_c1,
+        }
     }
 
-    pub fn load_clk<F: Field>(
+    pub fn load_table(
         &self,
-        mut layouter: impl Layouter<F>,
-        clks: Vec<F>,
+        mut layouter: impl Layouter<Fq>,
+        matrix: &Matrix,
     ) -> Result<(), Error> {
         layouter.assign_region(
-            || "processor_matrix",
+            // Constraint P_0: cycle increases by one per step
+            || "P_0",
             |mut region| {
-                for (idx, clk) in clks.iter().enumerate() {
+                let processor_matrix = &matrix.processor_matrix;
+                for (idx, reg) in processor_matrix.iter().enumerate() {
                     // enable until the second last clk
-                    if idx < clks.len() - 1 {
-                        self.s_clk.enable(&mut region, idx)?;
+                    if idx < processor_matrix.len() - 1 {
+                        self.s_p0.enable(&mut region, idx)?;
                     }
+                    region.assign_advice(|| "clk", self.clk, idx, || Value::known(reg.cycle))?;
+                }
+                Ok(())
+            },
+        )?;
+
+        layouter.assign_region(
+            // Constraint C_0 & C1
+            || "C_0 & C_1",
+            |mut region| {
+                let processor_matrix = &matrix.processor_matrix;
+                for (idx, reg) in processor_matrix.iter().enumerate() {
+                    self.s_c0.enable(&mut region, idx)?;
+                    self.s_c1.enable(&mut region, idx)?;
                     region.assign_advice(
-                        || "clk",
-                        self.clk,
+                        || "mv",
+                        self.mv,
                         idx,
-                        || Value::known(F::from(*clk)),
+                        || Value::known(reg.memory_value),
+                    )?;
+                    region.assign_advice(
+                        || "mvi",
+                        self.mvi,
+                        idx,
+                        || Value::known(reg.memory_value_inverse),
                     )?;
                 }
                 Ok(())
@@ -57,24 +109,20 @@ impl Config {
     }
 }
 
+#[derive(Default)]
 struct MyCircuit<F: Field> {
     _marker: PhantomData<F>,
-    vm: Interpreter,
+    matrix: Matrix,
 }
 
-// interpreter side should implement Field as abstract type
-// so I can do:
-// impl <F: Field> Circuit<F> for MyCircuit<F> {...}
+// It would be nice if we can use generic type here
+// impl <F:Field> Circuit<F> for MyCircuit<F> {...}
 impl Circuit<Fq> for MyCircuit<Fq> {
     type Config = Config;
     type FloorPlanner = SimpleFloorPlanner;
 
     fn without_witnesses(&self) -> Self {
-        // TODO: default for interpreter
-        Self {
-            _marker: PhantomData,
-            vm: Interpreter::new(),
-        }
+        Self::default()
     }
 
     fn configure(meta: &mut ConstraintSystem<Fq>) -> Self::Config {
@@ -87,13 +135,12 @@ impl Circuit<Fq> for MyCircuit<Fq> {
         mut layouter: impl Layouter<Fq>,
     ) -> Result<(), Error> {
         let clks: Vec<Fq> = self
-            .vm
             .matrix
             .processor_matrix
             .iter()
             .map(|x| x.cycle)
             .collect();
-        config.load_clk(layouter, clks);
+        config.load_table(layouter, &self.matrix);
         Ok(())
     }
 }
@@ -107,7 +154,7 @@ fn main() {
 
     let circuit = MyCircuit {
         _marker: PhantomData,
-        vm,
+        matrix: vm.matrix,
     };
     let prover = MockProver::run(8, &circuit, vec![]).unwrap();
     prover.assert_satisfied();
