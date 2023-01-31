@@ -1,0 +1,3 @@
+[submodule "zkbrainfuck"]
+	path = zkbrainfuck
+	url = https://github.com/mohanson/zkbrainfuck.git
