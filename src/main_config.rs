@@ -11,13 +11,13 @@ use halo2_proofs::plonk::*;
 use std::marker::PhantomData;
 
 #[derive(Clone, Debug, Copy)]
-pub struct MainConfig {
-    p_config: ProcessorTableConfig,
+pub struct MainConfig<const RANGE: usize> {
+    p_config: ProcessorTableConfig<RANGE>,
     m_config: MemoryTableConfig,
     i_config: InstructionTableConfig,
 }
 
-impl Config for MainConfig {
+impl<const RANGE: usize> Config for MainConfig<RANGE> {
     fn configure(cs: &mut ConstraintSystem<Fq>) -> Self {
         Self {
             p_config: ProcessorTableConfig::configure(cs),
@@ -34,12 +34,12 @@ impl Config for MainConfig {
 }
 
 #[derive(Default)]
-pub struct MyCircuit<F: Field> {
+pub struct MyCircuit<F: Field, const RANGE: usize> {
     _marker: PhantomData<F>,
     matrix: Matrix,
 }
 
-impl MyCircuit<Fq> {
+impl<const RANGE: usize> MyCircuit<Fq, RANGE> {
     pub fn new(matrix: Matrix) -> Self {
         Self {
             _marker: PhantomData,
@@ -50,8 +50,8 @@ impl MyCircuit<Fq> {
 
 // It would be nice if we can use generic type here
 // impl <F:Field> Circuit<F> for MyCircuit<F> {...}
-impl Circuit<Fq> for MyCircuit<Fq> {
-    type Config = MainConfig;
+impl<const RANGE: usize> Circuit<Fq> for MyCircuit<Fq, RANGE> {
+    type Config = MainConfig<RANGE>;
     type FloorPlanner = SimpleFloorPlanner;
 
     fn without_witnesses(&self) -> Self {

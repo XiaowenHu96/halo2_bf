@@ -1,3 +1,4 @@
+use crate::range_table::RangeTableConfig;
 use crate::utils::*;
 use ckb_bf_zkvm::matrix::Matrix;
 
@@ -7,7 +8,7 @@ use halo2_proofs::plonk::*;
 use halo2_proofs::poly::Rotation;
 
 #[derive(Clone, Debug, Copy)]
-pub struct ProcessorTableConfig {
+pub struct ProcessorTableConfig<const RANGE: usize> {
     clk: Column<Advice>,
     ip: Column<Advice>,
     ci: Column<Advice>,
@@ -15,15 +16,18 @@ pub struct ProcessorTableConfig {
     mp: Column<Advice>,
     mv: Column<Advice>,
     mvi: Column<Advice>,
-    s_p: Selector, // Selector for condition P category (Processor Table)
+    lookup_table: RangeTableConfig<RANGE>, // Lookup table ensure mv are within [0-255]
+    s_lookup: Selector,                    // Selector for lookup_table
+    s_p: Selector,                         // Selector for condition P category (Processor Table)
     s_c: Selector, // Selector for condition C category (Consistency Constraints)
 }
 
-impl Config for ProcessorTableConfig {
+impl<const RANGE: usize> Config for ProcessorTableConfig<RANGE> {
     fn configure(cs: &mut ConstraintSystem<Fq>) -> Self {
         let zero = Expression::Constant(Fq::zero());
         let one = Expression::Constant(Fq::one());
         let two = Expression::Constant(Fq::from(2));
+        let range_max = Expression::Constant(Fq::from(255));
 
         let clk = cs.advice_column();
         let ci = cs.advice_column();
@@ -32,8 +36,16 @@ impl Config for ProcessorTableConfig {
         let mp = cs.advice_column();
         let mv = cs.advice_column();
         let mvi = cs.advice_column();
+        let lookup_table = RangeTableConfig::configure(cs);
+        let s_lookup = cs.complex_selector();
         let s_c = cs.selector();
         let s_p = cs.selector();
+
+        cs.lookup("Range-Check: mv are within 0-255", |vc| {
+            let s_lookup = vc.query_selector(s_lookup);
+            let mv = vc.query_advice(mv, Rotation::cur());
+            vec![(s_lookup * mv, lookup_table.table)]
+        });
 
         cs.create_gate("P0: clk increase one per step", |vc| {
             let s_p = vc.query_selector(s_p);
@@ -142,12 +154,17 @@ impl Config for ProcessorTableConfig {
             let expr1 =
                 (deselectors[LB].clone() + deselectors[RB].clone() + deselectors[PUTCHAR].clone())
                     * (next_mv.clone() - cur_mv.clone());
-            // ADD: mv increases by 1
-            let expr_add =
-                deselectors[ADD].clone() * (next_mv.clone() - cur_mv.clone() - one.clone());
-            // sub: mv decreases by 1
-            let expr_sub =
-                deselectors[SUB].clone() * (next_mv.clone() - cur_mv.clone() + one.clone());
+            // note: we have lookup table to ensure all mvs are within [0-255],
+            // therefore, value can only decreases by 255 iff cur_mv=255, next_mv=0
+            // same goes for wrapping_sub
+            // ADD: mv increases by 1, or decreases by 255
+            let expr_add = deselectors[ADD].clone()
+                * (next_mv.clone() - cur_mv.clone() - one.clone())
+                * (next_mv.clone() - cur_mv.clone() + range_max.clone());
+            // sub: mv decreases by 1, or increases by 255
+            let expr_sub = deselectors[SUB].clone()
+                * (next_mv.clone() - cur_mv.clone() + one.clone())
+                * (next_mv.clone() - cur_mv.clone() - range_max.clone());
             // SHL, SHR, GETCHAR: always true (check elsewhere)
             let expr2 = (deselectors[SHL].clone()
                 + deselectors[SHR].clone()
@@ -164,12 +181,16 @@ impl Config for ProcessorTableConfig {
             mp,
             mv,
             mvi,
+            lookup_table,
+            s_lookup,
             s_p,
             s_c,
         }
     }
 
-    fn load_table(&self, layouter: & mut impl Layouter<Fq>, matrix: &Matrix) -> Result<(), Error> {
+    fn load_table(&self, layouter: &mut impl Layouter<Fq>, matrix: &Matrix) -> Result<(), Error> {
+        // Init lookup table
+        self.lookup_table.load_table(layouter, matrix)?;
         layouter.assign_region(
             || "Load Processor Table",
             |mut region| {
@@ -181,6 +202,8 @@ impl Config for ProcessorTableConfig {
                     }
                     // Enable C condition check
                     self.s_c.enable(&mut region, idx)?;
+                    // Enable lookup
+                    self.s_lookup.enable(&mut region, idx)?;
 
                     region.assign_advice(|| "clk", self.clk, idx, || Value::known(reg.cycle))?;
                     region.assign_advice(

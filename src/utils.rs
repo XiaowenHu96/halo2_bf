@@ -1,8 +1,8 @@
+use ckb_bf_zkvm::code;
+use ckb_bf_zkvm::matrix::Matrix;
 use halo2_proofs::circuit::Layouter;
 use halo2_proofs::halo2curves::bn256::Fq;
 use halo2_proofs::plonk::*;
-use ckb_bf_zkvm::code;
-use ckb_bf_zkvm::matrix::Matrix;
 
 pub const OPCODES: [u8; 8] = [
     code::SHL,
@@ -24,7 +24,9 @@ pub const PUTCHAR: usize = 5;
 pub const LB: usize = 6;
 pub const RB: usize = 7;
 
+pub const DOMAIN: usize = 256;
+
 pub trait Config {
     fn configure(cs: &mut ConstraintSystem<Fq>) -> Self;
-    fn load_table(&self, layouter: & mut impl Layouter<Fq>, matrix: &Matrix) -> Result<(), Error>;
+    fn load_table(&self, layouter: &mut impl Layouter<Fq>, matrix: &Matrix) -> Result<(), Error>;
 }
