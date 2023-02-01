@@ -27,7 +27,7 @@ impl<const RANGE: usize> Config for ProcessorTableConfig<RANGE> {
         let zero = Expression::Constant(Fq::zero());
         let one = Expression::Constant(Fq::one());
         let two = Expression::Constant(Fq::from(2));
-        let range_max = Expression::Constant(Fq::from(RANGE - 1 as u64));
+        let range_max = Expression::Constant(Fq::from((RANGE - 1) as u64));
 
         let clk = cs.advice_column();
         let ci = cs.advice_column();
