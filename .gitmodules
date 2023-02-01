@@ -1,3 +1,3 @@
-[submodule "zkbrainfuck"]
-	path = zkbrainfuck
-	url = https://github.com/mohanson/zkbrainfuck.git
+[submodule "ckb-bf-zkvm"]
+	path = ckb-bf-zkvm
+	url = git@github.com:cryptape/ckb-bf-zkvm.git
