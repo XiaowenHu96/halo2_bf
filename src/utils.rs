@@ -1,8 +1,8 @@
 use halo2_proofs::circuit::Layouter;
 use halo2_proofs::halo2curves::bn256::Fq;
 use halo2_proofs::plonk::*;
-use zkbrainfuck::code;
-use zkbrainfuck::matrix::Matrix;
+use ckb_bf_zkvm::code;
+use ckb_bf_zkvm::matrix::Matrix;
 
 pub const OPCODES: [u8; 8] = [
     code::SHL,

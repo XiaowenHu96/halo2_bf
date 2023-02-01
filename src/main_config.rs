@@ -2,7 +2,7 @@ use crate::instruction_table::InstructionTableConfig;
 use crate::memory_table::MemoryTableConfig;
 use crate::processor_table::ProcessorTableConfig;
 use crate::utils::*;
-use zkbrainfuck::matrix::Matrix;
+use ckb_bf_zkvm::matrix::Matrix;
 
 use halo2_proofs::arithmetic::Field;
 use halo2_proofs::circuit::{Layouter, SimpleFloorPlanner};

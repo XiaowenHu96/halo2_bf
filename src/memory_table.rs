@@ -1,5 +1,5 @@
 use crate::utils::*;
-use zkbrainfuck::matrix::Matrix;
+use ckb_bf_zkvm::matrix::Matrix;
 
 use halo2_proofs::circuit::{Layouter, Value};
 use halo2_proofs::halo2curves::bn256::Fq;

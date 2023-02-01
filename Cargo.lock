@@ -72,6 +72,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
+name = "ckb-bf-zkvm"
+version = "0.1.0"
+dependencies = [
+ "halo2",
+ "halo2_gadgets",
+ "halo2_proofs",
+]
+
+[[package]]
 name = "constant_time_eq"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -183,10 +192,10 @@ dependencies = [
 name = "halo2_bf"
 version = "0.1.0"
 dependencies = [
+ "ckb-bf-zkvm",
  "halo2",
  "halo2_gadgets",
  "halo2_proofs",
- "zkbrainfuck",
 ]
 
 [[package]]
@@ -581,13 +590,4 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "05f360fc0b24296329c78fda852a1e9ae82de9cf7b27dae4b7f62f118f77b9ed"
 dependencies = [
  "tap",
-]
-
-[[package]]
-name = "zkbrainfuck"
-version = "0.1.0"
-dependencies = [
- "halo2",
- "halo2_gadgets",
- "halo2_proofs",
 ]
