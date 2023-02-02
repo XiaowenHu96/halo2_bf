@@ -9,6 +9,14 @@ use halo2_proofs::circuit::{Layouter, SimpleFloorPlanner};
 use halo2_proofs::halo2curves::bn256::Fq;
 use halo2_proofs::plonk::*;
 use std::marker::PhantomData;
+/**
+ * TODO: What's Misssing?
+ * 1. permutation running product (prp) to link processor table and memory table
+ * 2. running evaluation (re) to link processor table and output table
+ * 3. re to link processor table and input table
+ * 4. link processor table and instruction table
+ * 4. read public input and expose public output 
+ */
 
 #[derive(Clone, Debug, Copy)]
 pub struct MainConfig<const RANGE: usize> {
