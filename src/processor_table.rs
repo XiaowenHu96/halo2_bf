@@ -20,6 +20,7 @@ pub struct ProcessorTableConfig<const RANGE: usize> {
     s_lookup: Selector,                    // Selector for lookup_table
     s_p: Selector,                         // Selector for condition P category (Processor Table)
     s_c: Selector, // Selector for condition C category (Consistency Constraints)
+    s_b: Selector, // Selector for condition B category (Boundary Constraints)
 }
 
 impl<const RANGE: usize> Config for ProcessorTableConfig<RANGE> {
@@ -40,6 +41,31 @@ impl<const RANGE: usize> Config for ProcessorTableConfig<RANGE> {
         let s_lookup = cs.complex_selector();
         let s_c = cs.selector();
         let s_p = cs.selector();
+        let s_b = cs.selector();
+
+        cs.create_gate("B0: clk_0 = 0", |vc| {
+            let s_b = vc.query_selector(s_b);
+            let clk = vc.query_advice(clk, Rotation::cur());
+            vec![s_b * clk]
+        });
+
+        cs.create_gate("B1: ip_0 = 0", |vc| {
+            let s_b = vc.query_selector(s_b);
+            let ip = vc.query_advice(ip, Rotation::cur());
+            vec![s_b * ip]
+        });
+
+        cs.create_gate("B3: mp_0 = 0", |vc| {
+            let s_b = vc.query_selector(s_b);
+            let mp = vc.query_advice(mp, Rotation::cur());
+            vec![s_b * mp]
+        });
+
+        cs.create_gate("B4: mv_0 = 0", |vc| {
+            let s_b = vc.query_selector(s_b);
+            let mv = vc.query_advice(mv, Rotation::cur());
+            vec![s_b * mv]
+        });
 
         cs.lookup("Range-Check: mv are within 0-255", |vc| {
             let s_lookup = vc.query_selector(s_lookup);
@@ -185,6 +211,7 @@ impl<const RANGE: usize> Config for ProcessorTableConfig<RANGE> {
             s_lookup,
             s_p,
             s_c,
+            s_b,
         }
     }
 
@@ -195,6 +222,8 @@ impl<const RANGE: usize> Config for ProcessorTableConfig<RANGE> {
             || "Load Processor Table",
             |mut region| {
                 let processor_matrix = &matrix.processor_matrix;
+                // B condition is enabled only for the first row
+                self.s_b.enable(&mut region, 0)?;
                 for (idx, reg) in processor_matrix.iter().enumerate() {
                     if idx < processor_matrix.len() - 1 {
                         // P condition is enabled except last row
